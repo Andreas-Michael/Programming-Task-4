@@ -1,0 +1,191 @@
+drop table countries_tmp;
+create table countries_tmp(
+    country char(40) not null,
+    code char(3) not null,
+    pop char(10) null,
+    gdp char(20) null
+);
+
+\copy countries_tmp from 'countries.csv' with (format csv, delimiter ';', header true);
+
+
+drop table summer_tmp;
+create table summer_tmp(
+    year int not null,
+    city char(25) not null,
+    sport char(25) not null,
+    discipline char(30) not null,
+    surname char(35) not null,
+    name char(40) not null,
+    country char(20) not null,
+    gender char(8) not null,
+    event char(60) not null,
+    medal char(8) not null
+);
+\copy summer_tmp from 'summer.csv' with (format csv, delimiter ';', header true);
+
+drop table winter_tmp;
+create table winter_tmp(
+    year int not null,
+    city char(25) not null,
+    sport char(25) not null,
+    discipline char(30) not null,
+    surname char(35) not null,
+    name char(40) not null,
+    country char(20) not null,
+    gender char(8) not null,
+    event char(60) not null,
+    medal char(8) not null
+);
+\copy winter_tmp from 'winter.csv' with (format csv, delimiter ';', header true);
+
+create table total_tmp(
+    season char(10) null,
+    year int not null,
+    city char(25) not null,
+    sport char(25) not null,
+    discipline char(30) not null,
+    surname char(35) not null,
+    name char(40) not null,
+    country char(20) not null,
+    gender char(8) not null,
+    event char(60) not null,
+    medal char(8) not null
+);
+
+insert into total_tmp(
+    year,
+    city,
+    sport,
+    discipline,
+    surname,
+    name,
+    country,
+    gender,
+    event,
+    medal    
+)
+select     year, city, sport, discipline, surname, name, country, gender, event, medal    
+from summer_tmp;
+
+update total_tmp set season='summer';
+
+insert into total_tmp(
+    year,
+    city,
+    sport,
+    discipline,
+    surname,
+    name,
+    country,
+    gender,
+    event,
+    medal    
+)
+select     year, city, sport, discipline, surname, name, country, gender, event, medal    
+from winter_tmp;
+
+update total_tmp set season='winter' where season is null;
+
+create table diorganosi(
+    id serial primary key,
+    city char(25) not null,
+    season char(10) not null,
+    year int not null
+);
+
+insert into diorganosi(city, season, year)
+select distinct city, season, year
+from total_tmp;
+
+create table country(
+    code char(3) not null,
+    name char(40) not null,
+    population int null,
+    gdp numeric(20, 13) null
+);
+
+insert into country(code, name, population, gdp)
+select code, country, cast(pop as integer), to_number(gdp, '999999.9999999999999')
+from countries_tmp where pop != '' and gdp != '';
+
+
+insert into country(code, name, population)
+select code, country, cast(pop as integer)
+from countries_tmp where pop != '' and gdp ='';
+
+insert into country(code, name)
+select code, country
+from countries_tmp where pop = '' and gdp ='';
+
+create table athlete(
+    id serial primary key,
+    surname char(35) not null,
+    name char(40) not null,
+    gender char(8) not null
+);
+
+insert into athlete(surname, name, gender)
+select distinct surname, name, gender
+from total_tmp;
+
+create table agonisma(
+    id serial primary key,
+    sport char(25) not null,
+    discipline char(30) not null,
+    gender char(8) not null,
+    event char(60) not null
+);
+
+insert into agonisma (sport, discipline, gender, event)
+select distinct sport, discipline, gender, event
+from total_tmp;
+
+create table wins(
+    diorganosi_id int not null,
+    agonisma_id int not null,
+    athlete_id int not null,
+    code char(4) not null,
+    medal char(10) not null
+);
+
+insert into wins(diorganosi_id, agonisma_id, athlete_id, code, medal)
+select diorganosi.id, agonisma.id, athlete.id, country, medal
+from diorganosi, agonisma, athlete, total_tmp
+where total_tmp.year=diorganosi.year AND
+    total_tmp.city=diorganosi.city AND
+    total_tmp.season=diorganosi.season AND
+    total_tmp.event=agonisma.event AND
+    total_tmp.gender=agonisma.gender AND
+    total_tmp.sport=agonisma.sport AND
+    total_tmp.discipline=agonisma.discipline AND
+    total_tmp.gender=athlete.gender AND
+    total_tmp.surname=athlete.surname AND
+    total_tmp.name=athlete.name ;
+
+create table proerxetai(
+    aid int not null,
+    code char(4) not null,
+    primary key(aid)
+);
+
+insert into proerxetai(aid, code)
+select athlete_id, min(code)
+from wins
+group by athlete_id;
+
+create table periexei(
+    diorganosi_id int not null,
+    agonisma_id int not null
+);
+
+insert into periexei(diorganosi_id, agonisma_id)
+select diorganosi.id, agonisma.id
+from diorganosi, agonisma, total_tmp
+where total_tmp.year=diorganosi.year AND
+    total_tmp.city=diorganosi.city AND
+    total_tmp.season=diorganosi.season AND
+    total_tmp.event=agonisma.event AND
+    total_tmp.gender=agonisma.gender AND
+    total_tmp.sport=agonisma.sport AND
+    total_tmp.discipline=agonisma.discipline;
